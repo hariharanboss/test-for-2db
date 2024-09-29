@@ -21,13 +21,14 @@ logging.getLogger("aiohttp.web").setLevel(logging.ERROR)
 
 from pyrogram import Client, idle 
 from pyromod import listen
-from database.ia_filterdb import Media
+from database.ia_filterdb import Media, Media2, choose_mediaDB, db as clientDB
 from database.users_chats_db import db
-from info import *
+from info import SESSION, API_ID, API_HASH, BOT_TOKEN, LOG_STR, LOG_CHANNEL, SECONDDB_URI
 from utils import temp
 from typing import Union, Optional, AsyncGenerator
 from Script import script 
-from datetime import date, datetime 
+from datetime import date, datetime
+from sample_info import tempDict
 from aiohttp import web
 from plugins import web_server
 from plugins.clone import restart_bots
@@ -63,7 +64,20 @@ async def start():
     b_users, b_chats = await db.get_banned()
     temp.BANNED_USERS = b_users
     temp.BANNED_CHATS = b_chats
-    await Media.ensure_indexes()
+     await Media2.ensure_indexes()
+        #choose the right db by checking the free space
+        stats = await clientDB.command('dbStats')
+        #calculating the free db space from bytes to MB
+        free_dbSize = round(512-((stats['dataSize']/(1024*1024))+(stats['indexSize']/(1024*1024))), 2)
+        if SECONDDB_URI and free_dbSize<10: #if the primary db have less than 10MB left, use second DB.
+            tempDict["indexDB"] = SECONDDB_URI
+            logging.info(f"Since Primary DB have only {free_dbSize} MB left, Secondary DB will be used to store datas.")
+        elif SECONDDB_URI is None:
+            logging.error("Missing second DB URI !\n\nAdd SECONDDB_URI now !\n\nExiting...")
+            exit()
+        else:
+            logging.info(f"Since primary DB have enough space ({free_dbSize}MB) left, It will be used for storing datas.")
+        await choose_mediaDB()
     me = await TechVJBot.get_me()
     temp.BOT = TechVJBot
     temp.ME = me.id
